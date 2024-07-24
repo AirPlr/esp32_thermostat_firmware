@@ -9,8 +9,46 @@ from thermistor import Thermistor
 import time
 import update
 
-version = "0.0"
+version = "0.0b1"
 
+clk = Pin(18, Pin.IN, Pin.PULL_UP)  # Replace 18 with the GPIO pin for CLK
+dt = Pin(19, Pin.IN, Pin.PULL_UP)   # Replace 19 with the GPIO pin for DT
+button = Pin(21, Pin.IN, Pin.PULL_UP)  # Replace 21 with the GPIO pin for SW
+counter = 0
+current_state_clk = 0
+last_state_clk = clk.value()
+
+
+
+
+BULB_IP = "192.168.10.13"  # Replace with your bulb's IP address
+
+
+
+def on_off():
+    url = f"http://{BULB_IP}/cm?cmnd=Power%20TOGGLE"
+    response = urequests.get(url)
+
+
+
+def read_encoder():
+    global counter, last_state_clk
+    current_state_clk = clk.value()
+    if current_state_clk != last_state_clk:
+        if dt.value() != current_state_clk:
+            counter += 1
+        else:
+            counter -= 1
+    last_state_clk = current_state_clk
+    
+    
+def check_button():
+    if not button.value():
+        return True
+    else:
+        return False
+        
+        
 i2c = I2C(scl=Pin(5), sda=Pin(4), freq=400000)
 oled = sh1106.SH1106_I2C(128, 64, i2c, None, 0x3c)
 
@@ -26,6 +64,8 @@ therm = Thermistor(ADC(34, atten=ADC.ATTN_11DB), beta=3435, therm_ohm=10_000, di
 temperature_array = []
 temperature_array.append(round(therm.read_temperature_celsius(),1))
 mid_temp_arr=[]
+
+
 
 def draw_icon(position_x, image_name_txt,sel):
     # Open the txt file containing the bits
@@ -49,8 +89,10 @@ def draw_icon(position_x, image_name_txt,sel):
                 pixel = (byte >> (7 - bit)) & 1
                 
                 if sel:
-                    if not pixel:
-                        oled.pixel(position_x + x * 8 + bit, y, pixel)
+                    if pixel:
+                        oled.pixel(position_x + x * 8 + bit, y, 0)
+                    else:
+                        oled.pixel(position_x + x * 8 + bit, y, 1)
                 else:
                     if pixel:
                         oled.pixel(position_x + x * 8 + bit, y, pixel)
@@ -60,6 +102,10 @@ def draw_icon(position_x, image_name_txt,sel):
 
        
     
+
+
+
+
 
 # Set up Wi-Fi connection
 def connect_wifi(ssid, password):
@@ -98,12 +144,7 @@ def update_software():
     else:
         print("No new version available")
 
-# Function to control the Tasmota bulb
-def control_bulb(ip, command):
-    url = "http://" + ip + "/cm?cmnd=" + command
-    response = urequests.get(url)
-    print("Bulb command sent:", command)
-    print("Response:", response.text)
+
 
 # Function to read temperature from heat sensor
 def read_temperature():
@@ -120,19 +161,12 @@ def read_temperature():
     temperature=round(temperature,1)
     return temperature+16.5
 
+
+
 # Main function
 def main():
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+     
     # Connect to Wi-Fi
     
     
@@ -145,37 +179,22 @@ def main():
         ssid = "Your_SSID"
         password = "Your_Password"
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
     
     connect_wifi(ssid, password)
-
-    # IP address of the Tasmota bulb
-    bulb_ip = "192.168.1.13"  # Replace with your bulb's IP address
-
+  
     # Main loop
     while True:
         # Read temperature
         temperature = read_temperature()
-        print("Temperature:", temperature)
-
-        # Display temperature on OLED screen
+        read_encoder()
+        if check_button():
+            on_off()
         oled.fill(0)
         oled.text("Temperature:", 0, 0)
-        
         oled.text(str(temperature) + " C", 0, 20)
         draw_icon(60, "thermometer.txt",False)
         oled.show()
-        # You can use the control_bulb() function to send commands to the Tasmota bulb
-
-        # Delay between readings
         sleep(1)
 
 # Run the main function
